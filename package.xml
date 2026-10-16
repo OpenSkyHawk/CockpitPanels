@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+  <name>Cockpit Panels</name>
+  <description>Tools for home-cockpit (simpit) panels: a parametric panel blank on the Dzus rail grid with outline, mount points and fastener holes, ready for laser cutting or 3D printing.</description>
+  <version>0.1.0</version>
+  <date>2026-10-16</date>
+  <maintainer>Motti Horesh</maintainer>
+  <license file="LICENSE">LGPL-2.1-or-later</license>
+  <url type="repository" branch="main">https://github.com/OpenSkyHawk/CockpitPanels</url>
+  <url type="bugtracker">https://github.com/OpenSkyHawk/CockpitPanels/issues</url>
+  <url type="readme">https://github.com/OpenSkyHawk/CockpitPanels/blob/main/README.md</url>
+  <icon>Resources/icons/CockpitPanels.svg</icon>
+  <freecadmin>1.1.0</freecadmin>
+
+  <content>
+    <workbench>
+      <classname>CockpitPanelsWorkbench</classname>
+      <subdirectory>./</subdirectory>
+      <tag>cockpit</tag>
+      <tag>simpit</tag>
+      <tag>home cockpit</tag>
+      <tag>flight simulator</tag>
+      <tag>panel</tag>
+      <tag>dzus</tag>
+      <tag>laser</tag>
+    </workbench>
+  </content>
+</package>
