@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -1 474.15 99.72" width="948" height="199"><text x="73.03" y="6" text-anchor="middle" font-family="sans-serif" font-size="5.5" fill="#888">FacePlate</text><g transform="translate(73.025,51.862)"><g   fill="none"
+   stroke="#8a8f98"
+   stroke-linecap="butt"
+   stroke-linejoin="miter"
+   stroke-width="0.45"
+   transform="scale(1, -1)"
+  >
+<path id= "1" d=" M -71.025 42.8625 L 71.025 42.8625 " />
+<path d="M-71.025 42.8625 A2 2 0 0 1 -73.025 40.8625" /><path d="M73.025 40.8625 A2 2 0 0 1 71.025 42.8625" /><path id= "4" d=" M -73.025 -40.8625 L -73.025 40.8625 " />
+<path id= "5" d=" M 73.025 -40.8625 L 73.025 40.8625 " />
+<path d="M-73.025 -40.8625 A2 2 0 0 1 -71.025 -42.8625" /><path d="M71.025 -42.8625 A2 2 0 0 1 73.025 -40.8625" /><path id= "8" d=" M -71.025 -42.8625 L 71.025 -42.8625 " />
+<circle cx ="-68.2625" cy ="-28.575" r ="4.75" /><circle cx ="-45" cy ="-24" r ="3.25" /><circle cx ="-25" cy ="-24" r ="3.25" /><circle cx ="-5" cy ="-24" r ="3.25" /><circle cx ="-45" cy ="-9" r ="2.6" /><circle cx ="-25" cy ="-9" r ="2.6" /><circle cx ="-5" cy ="-9" r ="2.6" /><circle cx ="30" cy ="-18" r ="4.75" /><circle cx ="68.2625" cy ="-28.575" r ="4.75" /><path id= "18" d=" M -8 24 L -42 24 " />
+<path d="M-6 22 A2 2 0 0 1 -8 24" /><path d="M-42 24 A2 2 0 0 1 -44 22" /><path id= "21" d=" M -6 8 L -6 22 " />
+<path id= "22" d=" M -44 22 L -44 8 " />
+<path d="M-8 6 A2 2 0 0 1 -6 8" /><path d="M-44 8 A2 2 0 0 1 -42 6" /><path id= "25" d=" M -42 6 L -8 6 " />
+<circle cx ="-68.2625" cy ="28.575" r ="4.75" /><circle cx ="30" cy ="18" r ="4.75" /><circle cx ="68.2625" cy ="28.575" r ="4.75" /></g>
+</g><text x="233.08" y="6" text-anchor="middle" font-family="sans-serif" font-size="5.5" fill="#888">Diffuser</text><g transform="translate(233.075,51.862)"><g   fill="none"
+   stroke="#8a8f98"
+   stroke-linecap="butt"
+   stroke-linejoin="miter"
+   stroke-width="0.45"
+   transform="scale(1, -1)"
+  >
+<path id= "1" d=" M -71.025 42.8625 L 71.025 42.8625 " />
+<path d="M-71.025 42.8625 A2 2 0 0 1 -73.025 40.8625" /><path d="M73.025 40.8625 A2 2 0 0 1 71.025 42.8625" /><path id= "4" d=" M -73.025 -40.8625 L -73.025 40.8625 " />
+<path id= "5" d=" M 73.025 -40.8625 L 73.025 40.8625 " />
+<path d="M-73.025 -40.8625 A2 2 0 0 1 -71.025 -42.8625" /><path d="M71.025 -42.8625 A2 2 0 0 1 73.025 -40.8625" /><path id= "8" d=" M -71.025 -42.8625 L 71.025 -42.8625 " />
+<circle cx ="-68.2625" cy ="-28.575" r ="2.8" /><circle cx ="-45" cy ="-24" r ="4.5" /><circle cx ="-25" cy ="-24" r ="4.5" /><circle cx ="-5" cy ="-24" r ="4.5" /><circle cx ="-45" cy ="-9" r ="4" /><circle cx ="-25" cy ="-9" r ="4" /><circle cx ="-5" cy ="-9" r ="4" /><circle cx ="30" cy ="-18" r ="6.5" /><circle cx ="68.2625" cy ="-28.575" r ="2.8" /><path id= "18" d=" M -7 25 L -43 25 " />
+<path d="M-5 23 A2 2 0 0 1 -7 25" /><path d="M-43 25 A2 2 0 0 1 -45 23" /><path id= "21" d=" M -5 7 L -5 23 " />
+<path id= "22" d=" M -45 23 L -45 7 " />
+<path d="M-7 5 A2 2 0 0 1 -5 7" /><path d="M-45 7 A2 2 0 0 1 -43 5" /><path id= "25" d=" M -43 5 L -7 5 " />
+<circle cx ="-68.2625" cy ="28.575" r ="2.8" /><circle cx ="30" cy ="18" r ="6.5" /><circle cx ="68.2625" cy ="28.575" r ="2.8" /></g>
+</g><text x="393.12" y="6" text-anchor="middle" font-family="sans-serif" font-size="5.5" fill="#888">BackPlate</text><g transform="translate(393.125,51.862)"><g   fill="none"
+   stroke="#8a8f98"
+   stroke-linecap="butt"
+   stroke-linejoin="miter"
+   stroke-width="0.45"
+   transform="scale(1, -1)"
+  >
+<path id= "1" d=" M -71.025 42.8625 L 71.025 42.8625 " />
+<path d="M-71.025 42.8625 A2 2 0 0 1 -73.025 40.8625" /><path d="M73.025 40.8625 A2 2 0 0 1 71.025 42.8625" /><path id= "4" d=" M -73.025 -40.8625 L -73.025 40.8625 " />
+<path id= "5" d=" M 73.025 -40.8625 L 73.025 40.8625 " />
+<path d="M-73.025 -40.8625 A2 2 0 0 1 -71.025 -42.8625" /><path d="M71.025 -42.8625 A2 2 0 0 1 73.025 -40.8625" /><path id= "8" d=" M -71.025 -42.8625 L 71.025 -42.8625 " />
+<circle cx ="-68.2625" cy ="-28.575" r ="2.8" /><circle cx ="-45" cy ="-24" r ="3.25" /><path id= "11" d=" M -44.5 -15.5 L -45.5 -15.5 " />
+<path d="M-44 -16 A0.5 0.5 0 0 1 -44.5 -15.5" /><path d="M-45.5 -15.5 A0.5 0.5 0 0 1 -46 -16" /><path id= "14" d=" M -44 -18 L -44 -16 " />
+<path id= "15" d=" M -46 -16 L -46 -18 " />
+<path d="M-44.5 -18.5 A0.5 0.5 0 0 1 -44 -18" /><path d="M-46 -18 A0.5 0.5 0 0 1 -45.5 -18.5" /><path id= "18" d=" M -45.5 -18.5 L -44.5 -18.5 " />
+<circle cx ="-25" cy ="-24" r ="3.25" /><path id= "20" d=" M -13.5 -23.5 L -13.5 -24.5 " />
+<path d="M-13 -23 A0.5 0.5 0 0 1 -13.5 -23.5" /><path d="M-13.5 -24.5 A0.5 0.5 0 0 1 -13 -25" /><path id= "23" d=" M -11 -23 L -13 -23 " />
+<path id= "24" d=" M -13 -25 L -11 -25 " />
+<path d="M-10.5 -23.5 A0.5 0.5 0 0 1 -11 -23" /><path d="M-11 -25 A0.5 0.5 0 0 1 -10.5 -24.5" /><path id= "27" d=" M -10.5 -24.5 L -10.5 -23.5 " />
+<circle cx ="-5" cy ="-24" r ="3.25" /><path id= "29" d=" M -24.5 -15.5 L -25.5 -15.5 " />
+<path d="M-24 -16 A0.5 0.5 0 0 1 -24.5 -15.5" /><path d="M-25.5 -15.5 A0.5 0.5 0 0 1 -26 -16" /><path id= "32" d=" M -24 -18 L -24 -16 " />
+<path id= "33" d=" M -26 -16 L -26 -18 " />
+<path d="M-24.5 -18.5 A0.5 0.5 0 0 1 -24 -18" /><path d="M-26 -18 A0.5 0.5 0 0 1 -25.5 -18.5" /><path id= "36" d=" M -25.5 -18.5 L -24.5 -18.5 " />
+<circle cx ="-45" cy ="-9" r ="3" /><circle cx ="-25" cy ="-9" r ="3" /><circle cx ="-5" cy ="-9" r ="3" /><circle cx ="30" cy ="-18" r ="3.6" /><circle cx ="68.2625" cy ="-28.575" r ="2.8" /><circle cx ="24.3431" cy ="-12.3431" r ="1.6" /><path id= "43" d=" M -6 26 L -44 26 " />
+<path d="M-4 24 A2 2 0 0 1 -6 26" /><path d="M-44 26 A2 2 0 0 1 -46 24" /><path id= "46" d=" M -4 6 L -4 24 " />
+<path id= "47" d=" M -46 24 L -46 6 " />
+<path d="M-6 4 A2 2 0 0 1 -4 6" /><path d="M-46 6 A2 2 0 0 1 -44 4" /><path id= "50" d=" M -44 4 L -6 4 " />
+<circle cx ="-68.2625" cy ="28.575" r ="2.8" /><circle cx ="30" cy ="18" r ="3.6" /><circle cx ="30" cy ="26" r ="1.6" /><circle cx ="68.2625" cy ="28.575" r ="2.8" /></g>
+</g></svg>
