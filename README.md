@@ -55,6 +55,10 @@ On Windows the folder is `%APPDATA%\FreeCAD\v1-1\Mod`. To see yours, run `App.ge
 
 The **Panel Blank**, **Plate Stack** and **Export Layers** buttons are on the **Cockpit Panels** toolbar, and also on the Sketcher and Part Design toolbars so you don't have to switch workbench.
 
+<p align="center"><img src="docs/images/dialog_panel_blank.png" width="480" alt="Panel Blank dialog: units 9, width 146.05 mm, no extra rows, M5 socket cap fastener with a 5.6 mm hole, 2 mm corner radius"></p>
+
+<p align="center"><em>The Panel Blank dialog, re-opened on an existing blank: it comes up pre-filled and updates in place.</em></p>
+
 1. Open your panel document (or start a new one) and click **Panel Blank**.
 2. Enter the height in units (N), or type a measured height and let it round to the nearest N. Set the width if your panel isn't 5¾″, any extra fastener rows, the fastener, and a corner radius (sharp by default; a millimetre or two cuts cleaner on a laser than a sharp corner, and every plate in the stack follows it).
 3. Click OK. A **Panel Blank** group appears, centred on the origin on the XY plane:
@@ -99,6 +103,10 @@ Click **Plate Stack** in a document that has a Panel Blank. The dialog lists the
 | Diffuser | 1/8″ | Clearance |
 | BackPlate | 1/8″ | Clearance |
 
+<p align="center"><img src="docs/images/dialog_plate_stack.png" width="560" alt="Plate Stack dialog: three layers with thicknesses, the fastener-cut menu open showing Recess, Slot, Slot (open ends) and Clearance, the recess diameter and the four faceplate insets"></p>
+
+<p align="center"><em>The Plate Stack dialog with the faceplate's fastener-cut menu open.</em></p>
+
 Rename, add or remove layers and change thicknesses (`3`, `3 mm`, `1/8"`, `0.125 in`). Each layer becomes a Part Design Body with the same name. The faceplate's front face sits on the blank's sketch plane (z = 0) facing +z, and every further layer sits directly behind the one before, so the Top view shows the panel as seen in the cockpit.
 
 <p align="center"><img src="docs/images/stack_iso.png" width="560" alt="The assembled plate stack, faceplate on top, with screw-head recesses at the four mount points"></p>
@@ -111,6 +119,10 @@ Rename, add or remove layers and change thicknesses (`3`, `3 mm`, `1/8"`, `0.125
 | Recess | A larger circle at each mount point (default Ø9.5), so the screw head sits down in the layer |
 | Slot | The same circle opened through the nearest side edge, a U-shaped notch. Mounts too close together to leave a 3 mm web (rows one unit apart with the Ø9.5 default) share one slot: a straight edge runs from the peak of one arc to the next, so no thin sliver is left between them |
 | Slot (open ends) | Like Slot, but the slot holding the top outer row also runs straight out through the panel's top edge, and the one holding the bottom outer row through the bottom edge. Slots in the middle of the side stay closed |
+
+<p align="center"><img src="docs/images/faceplate_slots.png" width="560" alt="The example faceplate with Slot cuts: a U-shaped notch at each mount point, open through the side edge"></p>
+
+<p align="center"><em>The example faceplate with the Slot cut: each screw head drops into a notch open to the side edge.</em></p>
 
 The mount column sits 4.7625 mm in from the side edge, so a recess of Ø9.525 or more breaks through the edge; the dialog shows how much material is left.
 
@@ -125,6 +137,10 @@ Thicknesses, the recess Ø and the faceplate insets (`inset_l`, `inset_r`, `inse
 <p align="center"><img src="docs/images/plates.svg" width="720" alt="The three exported cut files side by side: FacePlate, Diffuser and BackPlate outlines with their holes"></p>
 
 <p align="center"><em>The example's three DXFs. Each plate gets its own hole sizes for the same controls: the diffuser's holes are larger to clear the control bodies, and the backplate adds the anti-rotation tab holes for the toggles and rotaries.</em></p>
+
+<p align="center"><img src="docs/images/lightburn_import.png" width="720" alt="The three exported DXFs imported into LightBurn: backplate and diffuser on the left, slotted faceplate selected on the right"></p>
+
+<p align="center"><em>The same files opened in LightBurn, ready to cut. Here the faceplate uses the Slot cut.</em></p>
 
 ## Tests
 
