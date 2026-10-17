@@ -2,8 +2,9 @@
 """Panel Blank: the base blank for a Dzus-rail console panel.
 
 Adds a panel blank to the active document, inside a "Panel Blank" group:
-  PanelBlank        spreadsheet: units, pitch, width, fastener, hole_dia, extra rows
-  BlankOutline      sketch: panel rectangle, centred on the origin, XY (top) plane
+  PanelBlank        spreadsheet: units, pitch, width, fastener, hole_dia, corner_r, extra rows
+  BlankOutline      sketch: panel rectangle (corners rounded by corner_r), centred
+                    on the origin, XY (top) plane
   BlankMountPoints  sketch: one point per mount position on the Dzus grid
   BlankHoles        sketch: one clearance circle per mount (empty for "None")
 All dimensions are spreadsheet expressions, so editing a cell + recompute moves
@@ -12,6 +13,8 @@ sketches in place, so SubShapeBinders pointing at them keep working.
 
 Every object is a plain FreeCAD object: files open without this workbench.
 """
+import math
+
 import FreeCAD as App
 import Part
 import Sketcher
@@ -60,14 +63,15 @@ def _extras_only(units, rows):
     return sorted({r for r in rows if r not in (1.5, units - 1.5)})
 
 
-def _sheet(doc, units, width_mm, extra_rows, fastener, hole_dia):
+def _sheet(doc, units, width_mm, extra_rows, fastener, hole_dia, corner_r):
     ss = doc.getObject(SHEET) or doc.addObject("Spreadsheet::Sheet", SHEET)
     ss.clearAll()
     cells = [("units", str(units)),
              ("pitch", "=3 / 8 * 25.4 mm"),
              ("width", "=23 / 4 * 25.4 mm" if abs(width_mm - DEFAULT_WIDTH_MM) < 1e-9 else f"{width_mm} mm"),
              ("fastener", "'" + fastener),
-             ("hole_dia", f"{hole_dia} mm")]
+             ("hole_dia", f"{hole_dia} mm"),
+             ("corner_r", f"{corner_r} mm")]
     cells += [(f"row_e{i + 1}", str(r)) for i, r in enumerate(extra_rows)]
     for n, (alias, value) in enumerate(cells, start=1):
         ss.set(f"A{n}", alias)
@@ -86,23 +90,105 @@ def _sketch(doc, name):
     return sk
 
 
-def _outline(doc):
-    sk = _sketch(doc, OUTLINE)
-    c = [V(-70, 25, 0), V(70, 25, 0), V(70, -25, 0), V(-70, -25, 0)]  # rough, constraints fix it
-    for i in range(4):
-        sk.addGeometry(Part.LineSegment(c[i], c[(i + 1) % 4]))
-    for i in range(4):
-        sk.addConstraint(Sketcher.Constraint("Coincident", i, 2, (i + 1) % 4, 1))
-    for i in (0, 2):
-        sk.addConstraint(Sketcher.Constraint("Horizontal", i))
-    for i in (1, 3):
-        sk.addConstraint(Sketcher.Constraint("Vertical", i))
-    sk.addConstraint(Sketcher.Constraint("Symmetric", 0, 1, 1, 2, -1, 1))  # centred on origin
-    w = sk.addConstraint(Sketcher.Constraint("DistanceX", 0, 1, 0, 2, 140))
-    h = sk.addConstraint(Sketcher.Constraint("DistanceY", 1, 2, 1, 1, 50))
-    sk.setExpression(f"Constraints[{w}]", f"{SHEET}.width")
-    sk.setExpression(f"Constraints[{h}]", f"{SHEET}.units * {SHEET}.pitch")
+def rect_outline(sk, edges, exprs, radius, radius_expr):
+    """A closed rectangle in sketch sk, fully constrained.
+
+    edges:  (left, right, top, bottom) as numbers, the starting geometry
+    exprs:  the same four as expressions, so sheet edits move the edges
+    radius: corner radius; 0 gives sharp corners, > 0 adds a tangent arc per
+            corner sized by radius_expr. Switching between the two needs a re-run.
+    """
+    xl, xr, yt, yb = edges
+    con = Sketcher.Constraint
+    if radius <= 0:
+        c = [V(xl, yt, 0), V(xr, yt, 0), V(xr, yb, 0), V(xl, yb, 0)]
+        for i in range(4):
+            sk.addGeometry(Part.LineSegment(c[i], c[(i + 1) % 4]))
+        for i in range(4):
+            sk.addConstraint(con("Coincident", i, 2, (i + 1) % 4, 1))
+        sk.addConstraint(con("Horizontal", 0))
+        sk.addConstraint(con("Horizontal", 2))
+        sk.addConstraint(con("Vertical", 1))
+        sk.addConstraint(con("Vertical", 3))
+        # line 3 starts bottom-left, line 1 starts top-right, line 0 starts top-left, line 2 bottom-right
+        placed = [("DistanceX", 3, 1, xl, exprs[0]), ("DistanceX", 1, 1, xr, exprs[1]),
+                  ("DistanceY", 0, 1, yt, exprs[2]), ("DistanceY", 2, 1, yb, exprs[3])]
+    else:
+        r = radius
+        top = sk.addGeometry(Part.LineSegment(V(xl + r, yt, 0), V(xr - r, yt, 0)))
+        right = sk.addGeometry(Part.LineSegment(V(xr, yb + r, 0), V(xr, yt - r, 0)))
+        bottom = sk.addGeometry(Part.LineSegment(V(xl + r, yb, 0), V(xr - r, yb, 0)))
+        left = sk.addGeometry(Part.LineSegment(V(xl, yb + r, 0), V(xl, yt - r, 0)))
+        q = math.pi / 2
+
+        def arc(cx, cy, a0):
+            return sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, cy, 0), V(0, 0, 1), r), a0, a0 + q))
+
+        tr = arc(xr - r, yt - r, 0)        # starts on the right edge, ends on the top
+        tl = arc(xl + r, yt - r, q)        # starts on the top, ends on the left edge
+        bl = arc(xl + r, yb + r, 2 * q)    # starts on the left edge, ends on the bottom
+        br = arc(xr - r, yb + r, 3 * q)    # starts on the bottom, ends on the right edge
+        for a, b in [((top, 2), (tr, 2)), ((top, 1), (tl, 1)), ((right, 2), (tr, 1)), ((right, 1), (br, 2)),
+                     ((bottom, 1), (bl, 2)), ((bottom, 2), (br, 1)), ((left, 1), (bl, 1)), ((left, 2), (tl, 2))]:
+            sk.addConstraint(con("Tangent", a[0], a[1], b[0], b[1]))
+        sk.addConstraint(con("Horizontal", top))
+        sk.addConstraint(con("Horizontal", bottom))
+        sk.addConstraint(con("Vertical", left))
+        sk.addConstraint(con("Vertical", right))
+        for g in (tr, tl, bl, br):
+            c = sk.addConstraint(con("Radius", g, r))
+            sk.setExpression(f"Constraints[{c}]", radius_expr)
+        placed = [("DistanceX", left, 1, xl, exprs[0]), ("DistanceX", right, 1, xr, exprs[1]),
+                  ("DistanceY", top, 1, yt, exprs[2]), ("DistanceY", bottom, 1, yb, exprs[3])]
+    for kind, g, pos, value, expr in placed:
+        c = sk.addConstraint(con(kind, -1, 1, g, pos, value))
+        sk.setExpression(f"Constraints[{c}]", expr)
     return sk
+
+
+def _outline(doc, units, width_mm, corner_r):
+    sk = _sketch(doc, OUTLINE)
+    S, w, h = SHEET, width_mm / 2, units * PITCH_MM / 2
+    exprs = (f"-{S}.width / 2", f"{S}.width / 2", f"{S}.units * {S}.pitch / 2", f"-{S}.units * {S}.pitch / 2")
+    return rect_outline(sk, (-w, w, h, -h), exprs, corner_r, f"{S}.corner_r")
+
+
+def check_outline(units, width_mm, corner_r, hole_dia, insets=(0, 0, 0, 0)):
+    """Raise ValueError when the corner radius or the edge insets would cut into a
+    mount point (or its hole) or leave no outline. insets = (left, right, top, bottom),
+    positive = the edge moves inward."""
+    il, ir, it, ib = insets
+    w, h = width_mm - il - ir, units * PITCH_MM - it - ib
+    if min(insets) < 0:
+        raise ValueError("insets can't be negative (positive = smaller)")
+    if w <= 0 or h <= 0:
+        raise ValueError("the insets leave no panel")
+    if corner_r < 0:
+        raise ValueError("the corner radius can't be negative")
+    if corner_r >= min(w, h) / 2:
+        raise ValueError(f"corner radius {corner_r:g} mm is too big for a {w:g} x {h:g} mm outline")
+    side_room = PITCH_MM / 2 - hole_dia / 2          # mount column to side edge, minus the hole
+    end_room = 1.5 * PITCH_MM - hole_dia / 2         # outer row to top/bottom edge, minus the hole
+    for name, inset, room in (("left", il, side_room), ("right", ir, side_room),
+                              ("top", it, end_room), ("bottom", ib, end_room)):
+        if inset >= room:
+            raise ValueError(f"{name} inset {inset:g} mm reaches the mount holes "
+                             f"(keep it under {room:.2f} mm)")
+    # the corner mount holes must stay inside the rounded corner
+    xl, xr = -width_mm / 2 + il, width_mm / 2 - ir
+    yt, yb = units * PITCH_MM / 2 - it, -units * PITCH_MM / 2 + ib
+    hx, hy = width_mm / 2 - PITCH_MM / 2, units * PITCH_MM / 2 - 1.5 * PITCH_MM
+    for px, py in ((hx, hy), (-hx, hy), (hx, -hy), (-hx, -hy)):
+        if _depth_inside(px, py, xl, xr, yt, yb, corner_r) <= hole_dia / 2:
+            raise ValueError(f"corner radius {corner_r:g} mm cuts into the corner mount holes")
+
+
+def _depth_inside(px, py, xl, xr, yt, yb, r):
+    """How far point (px, py) is inside a rectangle with corner radius r
+    (negative = outside)."""
+    qx = abs(px - (xl + xr) / 2) - ((xr - xl) / 2 - r)
+    qy = abs(py - (yt + yb) / 2) - ((yt - yb) / 2 - r)
+    return r - math.hypot(max(qx, 0), max(qy, 0)) - min(max(qx, qy), 0)
 
 
 def _mount_exprs(n_extra):
@@ -144,13 +230,21 @@ def _holes(doc, n_extra, hole_dia):
 
 
 def make_blank(doc, units, width_mm=DEFAULT_WIDTH_MM, extra_rows=(),
-               fastener=DEFAULT_FASTENER, hole_dia=None):
+               fastener=DEFAULT_FASTENER, hole_dia=None, corner_r=0.0):
+    """corner_r rounds the panel's corners (every plate follows the outline);
+    0 keeps them sharp."""
     rows_for(units, extra_rows)  # validate what was typed
     extra_rows = _extras_only(units, extra_rows)
     if hole_dia is None:
         hole_dia = FASTENERS[fastener][0]
-    _sheet(doc, units, width_mm, extra_rows, fastener, hole_dia)
-    outline = _outline(doc)
+    check_outline(units, width_mm, corner_r, hole_dia)
+    if doc.getObject("PlateStack"):  # the faceplate's insets must still fit the new blank
+        from . import plate_stack
+        check_outline(units, width_mm, corner_r, hole_dia, plate_stack.read_insets(doc))
+    _sheet(doc, units, width_mm, extra_rows, fastener, hole_dia, corner_r)
+    outline = _outline(doc, units, width_mm, corner_r)
+    if doc.getObject("PlateStack"):  # rebuild the faceplate outline before the recompute sees the new corners
+        plate_stack._face_outline(doc, plate_stack.read_insets(doc), (units, width_mm, corner_r))
     points = _points(doc, len(extra_rows))
     holes = _holes(doc, len(extra_rows), hole_dia)
     grp = doc.getObject(GROUP) or doc.addObject("App::DocumentObjectGroup", GROUP)
@@ -159,13 +253,16 @@ def make_blank(doc, units, width_mm=DEFAULT_WIDTH_MM, extra_rows=(),
         if o not in grp.Group:
             grp.addObject(o)
     doc.recompute()
+    if doc.getObject("PlateStack"):  # a plate stack built on this blank follows the new rows
+        from . import plate_stack
+        plate_stack.update(doc)
     return outline, points
 
 
 def _read_existing(doc):
     ss = doc.getObject(SHEET)
     if ss is None:
-        return 6, DEFAULT_WIDTH_MM, (), DEFAULT_FASTENER, FASTENERS[DEFAULT_FASTENER][0]
+        return 6, DEFAULT_WIDTH_MM, (), DEFAULT_FASTENER, FASTENERS[DEFAULT_FASTENER][0], 0.0
     extras, i = [], 1
     while True:
         try:
@@ -180,10 +277,11 @@ def _read_existing(doc):
             return default
     w = ss.get("width")
     h = cell("hole_dia", FASTENERS[DEFAULT_FASTENER][0])
+    r = cell("corner_r", 0.0)
     fastener = cell("fastener", DEFAULT_FASTENER)
     fastener = fastener if fastener in FASTENERS else DEFAULT_FASTENER
     return (int(ss.get("units")), float(getattr(w, "Value", w)), tuple(extras),
-            fastener, float(getattr(h, "Value", h)))
+            fastener, float(getattr(h, "Value", h)), float(getattr(r, "Value", r)))
 
 
 def run_dialog():
@@ -191,7 +289,7 @@ def run_dialog():
     from PySide import QtWidgets
 
     doc = App.ActiveDocument or App.newDocument("PanelBlank")
-    units0, width0, extras0, fastener0, hole0 = _read_existing(doc)
+    units0, width0, extras0, fastener0, hole0, corner0 = _read_existing(doc)
 
     dlg = QtWidgets.QDialog(Gui.getMainWindow())
     dlg.setWindowTitle("Panel Blank" + (" — update" if doc.getObject(SHEET) else ""))
@@ -214,6 +312,10 @@ def run_dialog():
     hole = QtWidgets.QDoubleSpinBox(); hole.setRange(0, 20); hole.setDecimals(2)
     hole.setSuffix(" mm"); hole.setValue(hole0)
     head_note = QtWidgets.QLabel()
+    corner = QtWidgets.QDoubleSpinBox(); corner.setRange(0, 20); corner.setDecimals(2)
+    corner.setSuffix(" mm"); corner.setValue(corner0); corner.setSpecialValueText("sharp")
+    corner.setToolTip("Rounds the panel's four corners; every plate in the stack follows. "
+                      "A small radius cuts cleaner on a laser than a sharp corner")
 
     def on_fastener(name):
         hole.setValue(FASTENERS[name][0])
@@ -250,6 +352,7 @@ def run_dialog():
     form.addRow("Fastener", fastener)
     form.addRow("Hole Ø", hole)
     form.addRow("", head_note)
+    form.addRow("Corner radius", corner)
     buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
     buttons.accepted.connect(dlg.accept); buttons.rejected.connect(dlg.reject)
     form.addRow(buttons)
@@ -261,7 +364,7 @@ def run_dialog():
         else:
             rows = tuple(float(t) for t in extras.text().replace(" ", "").split(",") if t)
         make_blank(doc, units.value(), width.value(), rows,
-                   fastener.currentText(), hole.value() if hole.isEnabled() else 0.0)
+                   fastener.currentText(), hole.value() if hole.isEnabled() else 0.0, corner.value())
     except ValueError as e:
         QtWidgets.QMessageBox.warning(Gui.getMainWindow(), "Panel Blank", str(e))
         return
