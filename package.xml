@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
   <name>Cockpit Panels</name>
-  <description>Tools for home-cockpit (simpit) panels: a parametric panel blank on the Dzus rail grid with outline, mount points and fastener holes, ready for laser cutting or 3D printing.</description>
+  <description>Tools for home-cockpit (simpit) panels: a parametric panel blank on the Dzus rail grid (outline with optional rounded corners, mount points, fastener holes), a layered plate stack (faceplate, diffuser, backplate) with per-layer fastener cuts, and a one-DXF-per-plate export for laser cutting.</description>
   <version>0.1.0</version>
   <date>2026-10-16</date>
   <maintainer>Motti Horesh</maintainer>

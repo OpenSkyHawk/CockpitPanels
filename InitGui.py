@@ -6,7 +6,7 @@ import FreeCADGui as Gui
 
 class CockpitPanelsWorkbench(Gui.Workbench):
     MenuText = "Cockpit Panels"
-    ToolTip = "Tools for home-cockpit panels: Dzus-grid panel blanks"
+    ToolTip = "Tools for home-cockpit panels: Dzus-grid panel blanks, layered plate stacks, per-plate DXF export"
 
     def __init__(self):
         from cockpitpanels import icon

@@ -200,6 +200,21 @@ check("M6 head is wider than the pitch (dialog warns)", pb.FASTENERS["M6 socket 
 check("M5 head fits inside the pitch", pb.FASTENERS["M5 socket cap"][1] < P)
 
 # --- DXF export ------------------------------------------------------------
+def dxf_entities(path):
+    """{(entity type, layer): count} for the LINE / CIRCLE / ARC entities in a DXF."""
+    lines = [ln.strip() for ln in open(path).read().split("\n")]
+    found = {}
+    for i, ln in enumerate(lines[:-1]):
+        if ln in ("LINE", "CIRCLE", "ARC") and lines[i - 1] == "0":
+            j = i + 1
+            while j < len(lines) - 1 and lines[j] != "0":
+                if lines[j] == "8":
+                    found[(ln, lines[j + 1])] = found.get((ln, lines[j + 1]), 0) + 1
+                    break
+                j += 2
+    return found
+
+
 doc = new_doc("Dxf")
 pb.make_blank(doc, 6)
 ctl = doc.addObject("Sketcher::SketchObject", "Controls")  # a user's own cutout sketch
@@ -207,20 +222,327 @@ ctl.addGeometry(Part.Circle(App.Vector(-40, 0, 0), App.Vector(0, 0, 1), 4.8))
 doc.recompute()
 path = os.path.join(tempfile.mkdtemp(), "blank.dxf")
 importDXF.export([doc.BlankOutline, doc.BlankHoles, ctl], path)
-lines = [ln.strip() for ln in open(path).read().split("\n")]
-entities = {}
-for i, ln in enumerate(lines[:-1]):
-    if ln in ("LINE", "CIRCLE") and lines[i - 1] == "0":
-        j = i + 1
-        while j < len(lines) - 1 and lines[j] != "0":
-            if lines[j] == "8":
-                entities.setdefault((ln, lines[j + 1]), 0)
-                entities[(ln, lines[j + 1])] += 1
-                break
-            j += 2
+entities = dxf_entities(path)
 check("DXF: outline = 4 LINE on layer BlankOutline", entities.get(("LINE", "BlankOutline")) == 4, entities)
 check("DXF: holes = 4 CIRCLE on layer BlankHoles", entities.get(("CIRCLE", "BlankHoles")) == 4, entities)
 check("DXF: user sketch on its own layer", entities.get(("CIRCLE", "Controls")) == 1, entities)
+App.closeDocument(doc.Name)
+
+# --- three-layer plate stack + Export Layers --------------------------------
+from cockpitpanels import export_layers as el  # noqa: E402
+
+doc = new_doc("Stack")
+pb.make_blank(doc, 6)
+plates = []
+for name in ("FacePlate", "Diffuser", "BackPlate"):
+    body = doc.addObject("PartDesign::Body", name)
+    ob = body.newObject("PartDesign::SubShapeBinder", name + "_Outline")
+    ob.Support = [(doc.BlankOutline, [""])]
+    pad = body.newObject("PartDesign::Pad", name + "_Pad")
+    pad.Profile = ob
+    pad.Length = 3
+    doc.recompute()
+    pbind = body.newObject("PartDesign::SubShapeBinder", name + "_Points")
+    pbind.Support = [(doc.BlankMountPoints, [""])]
+    doc.recompute()
+    hole = body.newObject("PartDesign::Hole", name + "_Holes")
+    hole.Profile = pbind
+    hole.DepthType = "ThroughAll"
+    hole.Reversed = True
+    hole.setExpression("Diameter", "PanelBlank.hole_dia")
+    doc.recompute()
+    plates.append(body)
+doc.getObject("BackPlate").Label = "Back plate (3 mm)"  # labels with spaces must still give a clean name
+
+
+def plate_holes(body):
+    return len([e for e in el.plate_profile(body).Edges if e.Curve.TypeId == "Part::GeomCircle"])
+
+
+check("stack: each plate has 4 holes at 6U", all(plate_holes(b) == 4 for b in plates))
+pb.make_blank(doc, 7, extra_rows=(3.5,))
+doc.recompute()
+check("stack: re-run 7U + row 3.5 resizes every plate",
+      all(close(b.Shape.BoundBox.YLength, 7 * P, 1e-4) and plate_holes(b) == 6 for b in plates))
+check("stack: every feature still valid after the re-run",
+      all("Invalid" not in o.State and "Error" not in o.State for b in plates for o in b.Group))
+check("find_plates finds the three bodies", [b.Name for b in el.find_plates(doc)] == [b.Name for b in plates])
+
+folder = tempfile.mkdtemp()
+n_objects = len(doc.Objects)
+written = el.export_layers(plates, folder)
+names = sorted(os.path.basename(p) for p in written)
+check("Export Layers: one file per plate, named after the label",
+      names == ["Back_plate_3_mm.dxf", "Diffuser.dxf", "FacePlate.dxf"], names)
+check("Export Layers: the document is not modified", len(doc.Objects) == n_objects)
+check("Export Layers: scratch document closed", "CockpitPanelsExport" not in App.listDocuments())
+for path in written:
+    layer = os.path.basename(path)[:-4]
+    ents = dxf_entities(path)
+    check(f"Export Layers: {layer} = 4 LINE + 6 CIRCLE on layer {layer}",
+          ents == {("LINE", layer): 4, ("CIRCLE", layer): 6}, ents)
+App.closeDocument(doc.Name)
+
+# --- Plate Stack -----------------------------------------------------------
+from cockpitpanels import plate_stack as ps  # noqa: E402
+
+
+def profile_circles(body):
+    """Diameters of the full circles on the plate's back face."""
+    return sorted(round(e.Curve.Radius * 2, 3) for e in el.plate_profile(body).Edges
+                  if e.Curve.TypeId == "Part::GeomCircle" and e.isClosed())
+
+
+doc = new_doc("PlateStack")
+pb.make_blank(doc, 6)
+stack = ps.make_stack(doc)
+IN = 25.4
+want = {"FacePlate": (-IN / 16, 0), "Diffuser": (-3 * IN / 16, -IN / 16), "BackPlate": (-5 * IN / 16, -3 * IN / 16)}
+check("stack: default layers FacePlate / Diffuser / BackPlate", [b.Name for b in stack] == list(want))
+for b in stack:
+    bb = b.Shape.BoundBox
+    check(f"stack: {b.Name} spans z {want[b.Name][0]:.4f}..{want[b.Name][1]:.4f} (front at z = 0)",
+          close(bb.ZMin, want[b.Name][0], 1e-6) and close(bb.ZMax, want[b.Name][1], 1e-6), (bb.ZMin, bb.ZMax))
+    check(f"stack: {b.Name} is one solid, 146.05 x 57.15", len(b.Shape.Solids) == 1
+          and close(bb.XLength, 146.05, 1e-4) and close(bb.YLength, 57.15, 1e-4))
+check("stack: faceplate has 4 recesses at 9.5", profile_circles(doc.FacePlate) == [9.5] * 4, profile_circles(doc.FacePlate))
+check("stack: diffuser and backplate have 4 clearance holes at 5.6",
+      profile_circles(doc.Diffuser) == [5.6] * 4 and profile_circles(doc.BackPlate) == [5.6] * 4)
+check("stack: faceplate volume = plate - 4 recesses",
+      close(doc.FacePlate.Shape.Volume, 146.05 * 57.15 * IN / 16 - 4 * math.pi * 4.75 ** 2 * IN / 16, 1e-3))
+for name in (ps.RECESSES, ps.SLOTS):
+    sk = doc.getObject(name)
+    check(f"stack: {name} fully constrained, 4 closed profiles",
+          fully_constrained(sk) and len(sk.Shape.Wires) == 4 and all(w.isClosed() for w in sk.Shape.Wires))
+
+doc.PlateStack.set("recess_dia", "9 mm")
+doc.recompute()
+check("stack: recess_dia cell edit resizes the recesses live", profile_circles(doc.FacePlate) == [9.0] * 4)
+ps.make_stack(doc, [("FacePlate", "=1/16 * 25.4 mm", "Slot"), ("Diffuser", "=1/8 * 25.4 mm", "Clearance"),
+                    ("BackPlate", "=1/8 * 25.4 mm", "Clearance")], 9.5)
+recess_vol = 146.05 * 57.15 * IN / 16 - 4 * math.pi * 4.75 ** 2 * IN / 16
+check("stack: Slot style removes more than a recess and keeps one solid",
+      doc.FacePlate.Shape.Volume < recess_vol - 1 and len(doc.FacePlate.Shape.Solids) == 1)
+check("stack: Slot style opens the faceplate's side edges (no full recess circles left)",
+      profile_circles(doc.FacePlate) == [])
+before = [b.Shape.BoundBox.ZMin for b in stack]
+pb.make_blank(doc, 7, extra_rows=(3.5,))
+doc.recompute()
+check("stack: Panel Blank re-run (7U + row 3.5) resizes every layer",
+      all(close(b.Shape.BoundBox.YLength, 7 * P, 1e-4) for b in stack))
+after = [b.Shape.BoundBox.ZMin for b in stack]
+check("stack: ... and keeps the depths", all(close(a, b, 1e-6) for a, b in zip(after, before)), (before, after))
+check("stack: ... and the slot sketch follows the new row (6 slots)", len(doc.StackSlots.Shape.Wires) == 6)
+check("stack: ... diffuser now has 6 holes", profile_circles(doc.Diffuser) == [5.6] * 6)
+check("stack: every feature valid after the re-run",
+      all("Invalid" not in o.State and "Error" not in o.State for b in stack for o in b.Group))
+layers, rd, _ = ps.read_existing(doc)
+check("stack: settings read back from the sheet",
+      [(n, s) for n, _, s in layers] == [("FacePlate", "Slot"), ("Diffuser", "Clearance"), ("BackPlate", "Clearance")]
+      and rd == 9.5 and [ps.thickness_text(t) for _, t, _ in layers] == ['1/16"', '1/8"', '1/8"'], layers)
+ps.make_stack(doc, [("FacePlate", "=1/16 * 25.4 mm", "Recess"), ("Diffuser", "=1/8 * 25.4 mm", "Clearance"),
+                    ("BackPlate", "=1/8 * 25.4 mm", "Clearance")], 9.5)
+check("stack: switching back to Recess reuses the same bodies",
+      [doc.getObject(n) for n in want] == stack and profile_circles(doc.FacePlate) == [9.5] * 6)
+written = el.export_layers(stack, tempfile.mkdtemp())
+ents = {os.path.basename(p)[:-4]: dxf_entities(p) for p in written}
+check("stack + Export Layers: faceplate 4 LINE + 6 CIRCLE",
+      ents["FacePlate"] == {("LINE", "FacePlate"): 4, ("CIRCLE", "FacePlate"): 6}, ents["FacePlate"])
+App.closeDocument(doc.Name)
+
+# --- merged slots: neighbours one pitch apart share one slot ---------------
+def vertical_lines(body):
+    """(x, length) of the straight vertical edges on the plate's back face."""
+    out = []
+    for e in el.plate_profile(body).Edges:
+        if e.Curve.TypeId == "Part::GeomLine":
+            a, b = e.Vertexes[0].Point, e.Vertexes[-1].Point
+            if abs(a.x - b.x) < 1e-6:
+                out.append((round(a.x, 4), round(abs(a.y - b.y), 4)))
+    return sorted(out)
+
+
+check("slot runs: 6U rows 1.5 / 4.5 stay apart", ps.slot_runs(6, (), 9.5) == [[0], [1]])
+check("slot runs: 6U + row 2.5 merges 1.5 and 2.5", ps.slot_runs(6, (2.5,), 9.5) == [[0, 2], [1]])
+check("slot runs: rows two units apart stay apart", ps.slot_runs(7, (3.5,), 9.5) == [[0], [2], [1]])
+check("slot runs: a small recess one unit apart stays apart (web 4.5 mm)", ps.slot_runs(6, (2.5,), 5) == [[0], [2], [1]])
+check("slot runs: full rail 20U is one run per side",
+      ps.slot_runs(20, pb.full_rail_rows(20), 9.5) == [[0] + list(range(2, 2 + len(pb.full_rail_rows(20)))) + [1]])
+
+doc = new_doc("MergedSlots")
+pb.make_blank(doc, 6, extra_rows=(2.5,))
+slot = [("FacePlate", "=1/16 * 25.4 mm", "Slot"), ("Diffuser", "=1/8 * 25.4 mm", "Clearance")]
+stack = ps.make_stack(doc, slot)
+sk = doc.StackSlots
+check("merged slots: StackSlots fully constrained, 4 closed profiles (2 merged + 2 single)",
+      fully_constrained(sk) and len(sk.Shape.Wires) == 4 and all(w.isClosed() for w in sk.Shape.Wires),
+      (sk.solve(), len(sk.Shape.Wires)))
+inner_x = 146.05 / 2 - P / 2 - 4.75
+peaks = [(x, l) for x, l in vertical_lines(doc.FacePlate) if close(abs(x), inner_x, 1e-3)]
+check("merged slots: a straight peak-to-peak edge one pitch long on each side",
+      sorted(round(x, 3) for x, l in peaks if close(l, P, 1e-3)) == [round(-inner_x, 3), round(inner_x, 3)], peaks)
+check("merged slots: faceplate is one valid solid",
+      len(doc.FacePlate.Shape.Solids) == 1
+      and all("Invalid" not in o.State and "Error" not in o.State for o in doc.FacePlate.Group))
+col = 146.05 / 2 - P / 2
+mid_y = 6 * P / 2 - 2 * P              # halfway between rows 1.5 and 2.5
+z = -IN / 32                            # mid-thickness of the faceplate
+probe = [App.Vector(sx * (col - 3), mid_y, z) for sx in (-1, 1)]   # where the sliver was
+check("merged slots: no plate left in the cusp between the pair",
+      not any(doc.FacePlate.Shape.isInside(v, 1e-6, True) for v in probe))
+check("merged slots: plate still solid just inside the slot's peak line",
+      all(doc.FacePlate.Shape.isInside(App.Vector(sx * (col - 4.75 - 0.5), mid_y, z), 1e-6, True) for sx in (-1, 1)))
+doc.PlateStack.set("recess_dia", "9 mm")
+doc.recompute()
+check("merged slots: recess_dia cell edit keeps the slots valid",
+      len(doc.FacePlate.Shape.Solids) == 1 and fully_constrained(doc.StackSlots))
+App.closeDocument(doc.Name)
+
+doc = new_doc("FullRailSlots")
+pb.make_blank(doc, 12, extra_rows=pb.full_rail_rows(12))
+ps.make_stack(doc, slot)
+check("full rail 12U: one slot per side, faceplate one solid",
+      len(doc.StackSlots.Shape.Wires) == 2 and fully_constrained(doc.StackSlots)
+      and len(doc.FacePlate.Shape.Solids) == 1)
+App.closeDocument(doc.Name)
+
+# --- Slot (open ends): end runs open through the top / bottom edge ----------
+def edge_cut_width(body, y):
+    """Width of the plate material at height y along the top / bottom edge: 146.05 when
+    nothing cuts through that edge."""
+    sec = body.Shape.slice(App.Vector(0, 1, 0), y)
+    return sum(w.BoundBox.XLength for w in sec)
+
+
+open_slot = [("FacePlate", "=1/16 * 25.4 mm", "Slot (open ends)"), ("Diffuser", "=1/8 * 25.4 mm", "Clearance")]
+for n, extra, want_wires, why in [
+        (6, (), 4, "6U: each outer row its own run, open through its edge"),
+        (8, (2.5, 5.5), 4, "8U + 2.5 / 5.5: both outer pairs merged and open"),
+        (9, (2.5, 4.5), 6, "9U + 2.5 / 4.5: top pair open, middle row closed, bottom open"),
+        (12, tuple(pb.full_rail_rows(12)), 2, "12U full rail: one strip per side, top to bottom")]:
+    doc = new_doc("OpenSlots")
+    pb.make_blank(doc, n, extra_rows=extra)
+    ps.make_stack(doc, open_slot)
+    sk = doc.StackOpenSlots
+    fp = doc.FacePlate
+    top_y, bot_y = n * P / 2 - 0.2, -n * P / 2 + 0.2    # just inside the top / bottom edges
+    gap = 2 * (P / 2 + 4.75)                             # each side loses column inset + recess radius
+    ok = (fully_constrained(sk) and len(sk.Shape.Wires) == want_wires
+          and all(w.isClosed() for w in sk.Shape.Wires)
+          and len(fp.Shape.Solids) == 1
+          and all("Invalid" not in o.State and "Error" not in o.State for o in fp.Group)
+          and close(edge_cut_width(fp, top_y), 146.05 - gap, 1e-3)
+          and close(edge_cut_width(fp, bot_y), 146.05 - gap, 1e-3))
+    check(f"open-end slots: {why}", ok,
+          (sk.solve(), len(sk.Shape.Wires), len(fp.Shape.Solids),
+           round(edge_cut_width(fp, top_y), 3), round(edge_cut_width(fp, bot_y), 3)))
+    App.closeDocument(doc.Name)
+
+doc = new_doc("OpenSlotsMiddle")
+pb.make_blank(doc, 9, extra_rows=(4.5,))
+ps.make_stack(doc, open_slot)
+col = 146.05 / 2 - P / 2
+z = -IN / 32
+mid_closed = [App.Vector(sx * (col - 3), 9 * P / 2 - 3 * P, z) for sx in (-1, 1)]   # halfway 1.5 -> 4.5
+check("open-end slots: plate left between the open top run and a closed middle run",
+      all(doc.FacePlate.Shape.isInside(v, 1e-6, True) for v in mid_closed))
+doc.PlateStack.set("recess_dia", "9 mm")
+doc.recompute()
+check("open-end slots: recess_dia cell edit keeps them valid",
+      fully_constrained(doc.StackOpenSlots) and len(doc.FacePlate.Shape.Solids) == 1)
+check("plain Slot style unchanged next to it (closed U at the outer rows)",
+      fully_constrained(doc.StackSlots) and len(doc.StackSlots.Shape.Wires) == 6)
+App.closeDocument(doc.Name)
+
+# --- corner radius + faceplate insets -------------------------------------
+def arcs(shape):
+    return sorted(round(e.Curve.Radius, 4) for e in shape.Edges
+                  if e.Curve.TypeId == "Part::GeomCircle" and not e.isClosed())
+
+
+doc = new_doc("Corners")
+pb.make_blank(doc, 6, corner_r=2)
+sk = doc.BlankOutline
+check("corner_r 2: outline is 4 lines + 4 arcs R2, fully constrained",
+      fully_constrained(sk) and len(sk.Shape.Edges) == 8 and arcs(sk.Shape) == [2.0] * 4
+      and len(sk.Shape.Wires) == 1 and sk.Shape.Wires[0].isClosed(), arcs(sk.Shape))
+bb = sk.Shape.BoundBox
+check("corner_r 2: still 146.05 x 57.15, centred", close(bb.XLength, 146.05, 1e-4) and close(bb.YLength, 6 * P, 1e-4)
+      and close(bb.Center.x, 0, 1e-6) and close(bb.Center.y, 0, 1e-6))
+check("corner_r 2: mount points unchanged", points(doc) == sorted(
+    (round(sx * (146.05 / 2 - P / 2), 4), round(sy * (3 * P - 1.5 * P), 4)) for sx in (-1, 1) for sy in (-1, 1)))
+doc.PanelBlank.set("corner_r", "3 mm")
+doc.recompute()
+check("corner_r cell edit resizes the arcs live", arcs(doc.BlankOutline.Shape) == [3.0] * 4)
+check("corner_r read back", pb._read_existing(doc)[5] == 3.0)
+
+stack = ps.make_stack(doc, insets=(0.5, 0.5, 1, 1))
+fp, df = doc.FacePlate.Shape.BoundBox, doc.Diffuser.Shape.BoundBox
+check("insets: faceplate 145.05 x 55.15, centred",
+      close(fp.XLength, 145.05, 1e-4) and close(fp.YLength, 6 * P - 2, 1e-4) and close(fp.Center.x, 0, 1e-6), (fp.XLength, fp.YLength))
+check("insets: diffuser and backplate stay 146.05 x 57.15",
+      all(close(b.XLength, 146.05, 1e-4) and close(b.YLength, 6 * P, 1e-4)
+          for b in (df, doc.BackPlate.Shape.BoundBox)))
+check("insets: StackFaceOutline fully constrained, same corner radius",
+      fully_constrained(doc.StackFaceOutline) and arcs(doc.StackFaceOutline.Shape) == [3.0] * 4)
+check("insets: every layer one valid solid",
+      all(len(b.Shape.Solids) == 1 for b in stack)
+      and all("Invalid" not in o.State and "Error" not in o.State for b in stack for o in b.Group))
+check("insets: read back", ps.read_existing(doc)[2] == (0.5, 0.5, 1.0, 1.0), ps.read_existing(doc)[2])
+ps.make_stack(doc, insets=(0, 1, 0, 0))
+fp = doc.FacePlate.Shape.BoundBox
+check("insets: right only moves the right edge", close(fp.XMin, -146.05 / 2, 1e-4) and close(fp.XMax, 146.05 / 2 - 1, 1e-4))
+doc.PlateStack.set("inset_l", "1 mm")
+doc.recompute()
+check("insets: inset_l cell edit moves the left edge live", close(doc.FacePlate.Shape.BoundBox.XMin, -146.05 / 2 + 1, 1e-4))
+pb.make_blank(doc, 6, corner_r=0)
+check("Panel Blank re-run back to sharp corners: blank + faceplate outlines rebuilt",
+      arcs(doc.BlankOutline.Shape) == [] and len(doc.BlankOutline.Shape.Edges) == 4
+      and arcs(doc.StackFaceOutline.Shape) == [] and fully_constrained(doc.StackFaceOutline)
+      and close(doc.FacePlate.Shape.BoundBox.XMax, 146.05 / 2 - 1, 1e-4))
+pb.make_blank(doc, 6, corner_r=2)
+written = el.export_layers([doc.FacePlate, doc.Diffuser], tempfile.mkdtemp())
+ents = {os.path.basename(p)[:-4]: dxf_entities(p) for p in written}
+check("rounded corners export: diffuser 4 LINE + 4 ARC + 4 CIRCLE",
+      ents["Diffuser"] == {("LINE", "Diffuser"): 4, ("ARC", "Diffuser"): 4, ("CIRCLE", "Diffuser"): 4}, ents)
+check("inset faceplate: the 9.5 recesses open through the 1 mm-inset sides (no full circles)",
+      ("CIRCLE", "FacePlate") not in ents["FacePlate"] and ents["FacePlate"].get(("ARC", "FacePlate"), 0) > 4, ents)
+for kwargs, why in [(dict(insets=(2, 0, 0, 0)), "a side inset into the 5.6 hole"),
+                    (dict(insets=(0, 0, 12, 0)), "a top inset into the hole"),
+                    (dict(insets=(0, 0, -1, 0)), "a negative inset")]:
+    try:
+        ps.make_stack(doc, **kwargs)
+        check(f"insets reject {why}", False, "accepted")
+    except ValueError:
+        check(f"insets reject {why}", True)
+check("rejected insets leave the sheet as it was", ps.read_insets(doc) == (1.0, 1.0, 0.0, 0.0), ps.read_insets(doc))
+for r, why in [(25, "the corner holes"), (40, "half the height"), (-1, "a negative radius")]:
+    try:
+        pb.check_outline(6, 146.05, r, 5.6)
+        check(f"corner radius {r} rejected ({why})", False, "accepted")
+    except ValueError:
+        check(f"corner radius {r} rejected ({why})", True)
+check("corner radius 20 fits around the corner holes", pb.check_outline(6, 146.05, 20, 5.6) is None)
+App.closeDocument(doc.Name)
+
+for text, expr in [("3", "3 mm"), ("3 mm", "3 mm"), ('1/8"', "=1/8 * 25.4 mm"), ("1/16 in", "=1/16 * 25.4 mm"),
+                   ("0.125 in", "=0.125 * 25.4 mm")]:
+    check(f"thickness {text!r} -> {expr!r}", ps.parse_thickness(text) == expr, ps.parse_thickness(text))
+doc = new_doc("Bad")
+for args, why in [((), "no Panel Blank yet"), (([("A", "3 mm", "Recess"), ("A", "3 mm", "Clearance")],), "duplicate names"),
+                  (([("A", "3 mm", "Countersink")],), "unknown style")]:
+    if why != "no Panel Blank yet" and doc.getObject(pb.SHEET) is None:
+        pb.make_blank(doc, 6)
+    try:
+        ps.make_stack(doc, *args)
+        check(f"stack rejects {why}", False, "accepted")
+    except ValueError:
+        check(f"stack rejects {why}", True)
+try:
+    ps.parse_thickness("thick")
+    check("thickness rejects 'thick'", False, "accepted")
+except ValueError:
+    check("thickness rejects 'thick'", True)
 App.closeDocument(doc.Name)
 
 # --- input validation ------------------------------------------------------
