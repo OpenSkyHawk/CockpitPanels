@@ -120,6 +120,10 @@ Headless checks, run with FreeCAD's command-line binary (not its bundled `python
 
 It prints one PASS/FAIL line per check and exits non-zero on any failure.
 
+## Releasing
+
+Bump `<version>` (and `<date>`) in `package.xml` for every change that should reach users. The Addon Manager offers an update to installs made without git only when that version changes; merging new code to `main` alone is not enough.
+
 ## License
 
 LGPL-2.1-or-later, the same as FreeCAD. See [LICENSE](LICENSE).
