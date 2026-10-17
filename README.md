@@ -1,5 +1,9 @@
 # Cockpit Panels
 
+<p align="center"><img src="docs/images/stack_exploded.png" width="640" alt="Exploded view of a three-layer panel: dark faceplate with a display window, rotary and toggle holes and LED holes; a translucent diffuser; a backplate"></p>
+
+<p align="center"><em>A 9-unit example panel: faceplate, diffuser and backplate, pulled apart. Each layer has its own cutouts for the same display, two rotaries, three toggles and three LEDs.</em></p>
+
 A FreeCAD workbench for building home-cockpit (simpit) panels. It is built so more tools can be added; today it has three, used in this order:
 
 1. **Panel Blank** draws the base for a Dzus-rail console panel: the outline, a mount point at every fastener position on the rail grid, and a clearance hole at each one.
@@ -97,6 +101,10 @@ Click **Plate Stack** in a document that has a Panel Blank. The dialog lists the
 
 Rename, add or remove layers and change thicknesses (`3`, `3 mm`, `1/8"`, `0.125 in`). Each layer becomes a Part Design Body with the same name. The faceplate's front face sits on the blank's sketch plane (z = 0) facing +z, and every further layer sits directly behind the one before, so the Top view shows the panel as seen in the cockpit.
 
+<p align="center"><img src="docs/images/stack_iso.png" width="560" alt="The assembled plate stack, faceplate on top, with screw-head recesses at the four mount points"></p>
+
+<p align="center"><em>The example stack assembled. The faceplate's Recess cut lets the screw heads sit down in the plate.</em></p>
+
 | Fastener cut | What it cuts |
 |---|---|
 | Clearance | The blank's clearance holes (Ø from the fastener preset) |
@@ -113,6 +121,10 @@ Which slots merge is decided when the stack is built. Re-running Panel Blank reg
 Thicknesses, the recess Ø and the faceplate insets (`inset_l`, `inset_r`, `inset_t`, `inset_b`) live in the `PlateStack` spreadsheet: edit a cell and recompute. Click **Plate Stack** again to change layers or cuts; it updates the same Bodies in place. Re-running **Panel Blank** (new height, extra rows, fastener) updates the stack too.
 
 **Cut files per plate (Export Layers):** once each plate is its own Body, click **Export Layers** and pick a folder. It writes one DXF per Body, named after the Body's label (`FacePlate.dxf`, `Diffuser.dxf`, ...), with everything on a layer of the same name. Each file is the plate's bottom face flattened to z = 0, so it contains the outline and every hole or cutout that goes through that plate; a feature that only goes part-way through doesn't appear. Select some Bodies first to export only those. Your document is not changed.
+
+<p align="center"><img src="docs/images/plates.svg" width="720" alt="The three exported cut files side by side: FacePlate, Diffuser and BackPlate outlines with their holes"></p>
+
+<p align="center"><em>The example's three DXFs. Each plate gets its own hole sizes for the same controls: the diffuser's holes are larger to clear the control bodies, and the backplate adds the anti-rotation tab holes for the toggles and rotaries.</em></p>
 
 ## Tests
 
