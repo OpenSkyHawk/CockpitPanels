@@ -26,11 +26,15 @@ Because every panel sits on the same grid, stacked panels keep 28.575 mm (3 pitc
 
 **Addon Manager (recommended)**
 
-1. Tools → Addon Manager → ⚙ (Preferences) → **Custom repositories** → add
-   `https://github.com/OpenSkyHawk/CockpitPanels` with branch `main`.
-2. Find **Cockpit Panels** in the list and install it. Restart FreeCAD.
+Cockpit Panels is not in FreeCAD's official addon catalog yet, so add it as a custom repository first (FreeCAD 1.1):
 
-Updates arrive through the Addon Manager like any other addon.
+1. Open **Tools → Addon Manager** once, then close it. Its settings page only appears in Preferences after it has been opened.
+2. Open Preferences (**FreeCAD → Preferences…** on macOS, **Edit → Preferences…** on Windows and Linux) and select **Addon Manager** in the list on the left.
+3. Under **Custom repositories**, click **+** and enter `https://github.com/OpenSkyHawk/CockpitPanels` with branch `main`. Click **OK**.
+4. Open the Addon Manager again and search for `CockpitPanels`. Until it is in the official catalog, the list shows it under the repository name with a generic icon; the details page shows the full name and description.
+5. Click **Install**, then restart FreeCAD.
+
+**Updates:** the Addon Manager offers an update when a new version is released. Open it, select **CockpitPanels**, click **Update** and restart FreeCAD.
 
 **From a clone (for development)**
 
