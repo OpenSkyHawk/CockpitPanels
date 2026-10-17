@@ -191,20 +191,33 @@ def _depth_inside(px, py, xl, xr, yt, yb, r):
     return r - math.hypot(max(qx, 0), max(qy, 0)) - min(max(qx, qy), 0)
 
 
+def row_exprs(n_extra):
+    """Every mount row, in units from the top edge, as an expression: the two outer
+    rows by formula, the extras read from their own cells."""
+    S = SHEET
+    return ["1.5", f"{S}.units - 1.5"] + [f"{S}.row_e{i + 1}" for i in range(n_extra)]
+
+
+def mount_xy(side, row):
+    """(x, y) expressions for the mount on side -1 (left) / 1 (right) at row expression row."""
+    S = SHEET
+    return (f"{side} * ({S}.width / 2 - {S}.pitch / 2)",
+            f"{S}.units * {S}.pitch / 2 - ({row}) * {S}.pitch")
+
+
 def _mount_exprs(n_extra):
     """(x, y) expressions for every mount position; points and holes share them."""
-    S = SHEET
-    # rows: the two outer rows by formula, the extras read from their own cells
-    row_exprs = ["1.5", f"{S}.units - 1.5"] + [f"{S}.row_e{i + 1}" for i in range(n_extra)]
-    for row in row_exprs:
+    for row in row_exprs(n_extra):
         for side in (-1, 1):
-            yield (side, f"{side} * ({S}.width / 2 - {S}.pitch / 2)",
-                   f"{S}.units * {S}.pitch / 2 - ({row}) * {S}.pitch")
+            yield (side, *mount_xy(side, row))
 
 
-def _place(sk, g, pos, side, x_expr, y_expr):
-    cx = sk.addConstraint(Sketcher.Constraint("DistanceX", -1, 1, g, pos, side * 60))
-    cy = sk.addConstraint(Sketcher.Constraint("DistanceY", -1, 1, g, pos, 0))
+def _place(sk, g, pos, side, x_expr, y_expr, at=None):
+    """Pin point (g, pos) to the expressions. at = its current (x, y): the expressions
+    only apply on recompute, so the starting values must match the geometry."""
+    x0, y0 = at or (side * 60, 0)
+    cx = sk.addConstraint(Sketcher.Constraint("DistanceX", -1, 1, g, pos, x0))
+    cy = sk.addConstraint(Sketcher.Constraint("DistanceY", -1, 1, g, pos, y0))
     sk.setExpression(f"Constraints[{cx}]", x_expr)
     sk.setExpression(f"Constraints[{cy}]", y_expr)
 

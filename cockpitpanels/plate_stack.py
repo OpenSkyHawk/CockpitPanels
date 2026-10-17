@@ -26,6 +26,7 @@ Thicknesses, the recess diameter, the insets and the layers' depths live in the 
 spreadsheet: edit a cell and recompute. Running Plate Stack again updates the
 same objects in place.
 """
+import math
 import re
 
 import FreeCAD as App
@@ -48,6 +49,7 @@ DEFAULT_LAYERS = (            # name, thickness expression, style
     ("BackPlate", "=1/8 * 25.4 mm", "Clearance"),
 )
 SLOT_PAST_EDGE_MM = 1.0       # slots run this far past the side edge so the cut opens cleanly
+SLOT_MIN_WEB_MM = 3.0         # neighbouring slots closer than this merge into one
 
 
 def layer_name(text):
@@ -113,37 +115,83 @@ def _recesses(doc, n_extra):
     return sk
 
 
+def slot_runs(units, extra_rows, recess_dia):
+    """Mount rows grouped into runs whose slots merge: neighbours closer than
+    recess_dia + SLOT_MIN_WEB_MM centre to centre share one slot, so no thin
+    sliver of plate is left between them. Each run is a list of row indexes
+    into pb.row_exprs order (outer rows first, then the extras), top to bottom."""
+    rows = [1.5, units - 1.5] + list(extra_rows)
+    order = sorted(range(len(rows)), key=lambda i: rows[i])
+    runs = [[order[0]]]
+    for prev, i in zip(order, order[1:]):
+        if (rows[i] - rows[prev]) * pb.PITCH_MM < recess_dia + SLOT_MIN_WEB_MM:
+            runs[-1].append(i)
+        else:
+            runs.append([i])
+    return runs
+
+
 def _slots(doc, n_extra):
-    """A U per mount point: a half circle on the panel side, open through the side edge."""
+    """A U per mount point: a half circle on the panel side, open through the side edge.
+    Neighbouring mounts too close to leave a usable web share one slot: a quarter arc
+    at each end, joined by a straight line from the peak of one to the other."""
     sk = pb._sketch(doc, SLOTS)
-    r = DEFAULT_RECESS_MM / 2
+    units, width_mm, extras, _, _, _ = pb._read_existing(doc)
+    exprs = pb.row_exprs(n_extra)
+    r = read_existing(doc)[1] / 2 if doc.getObject(SHEET) else DEFAULT_RECESS_MM / 2
     reach = f"{pb.SHEET}.pitch / 2 + {SLOT_PAST_EDGE_MM} mm"
-    for side, x, y in pb._mount_exprs(n_extra):
-        cx = side * 60.0
-        if side > 0:   # right column: arc on the left, CCW from top (start) to bottom (end)
-            arc = Part.ArcOfCircle(Part.Circle(V(cx, 0, 0), V(0, 0, 1), r), 0.5 * 3.14159265, 1.5 * 3.14159265)
-            top, bottom = 1, 2
-        else:          # left column: arc on the right, CCW from bottom (start) to top (end)
-            arc = Part.ArcOfCircle(Part.Circle(V(cx, 0, 0), V(0, 0, 1), r), -0.5 * 3.14159265, 0.5 * 3.14159265)
-            top, bottom = 2, 1
-        out = cx + side * (r + 2)
-        a = sk.addGeometry(arc)
-        l1 = sk.addGeometry(Part.LineSegment(V(cx, r, 0), V(out, r, 0)))      # top edge, outwards
-        l2 = sk.addGeometry(Part.LineSegment(V(out, r, 0), V(out, -r, 0)))    # past the side edge
-        l3 = sk.addGeometry(Part.LineSegment(V(out, -r, 0), V(cx, -r, 0)))    # bottom edge, back in
-        con = Sketcher.Constraint
-        sk.addConstraint(con("Tangent", a, top, l1, 1))
-        sk.addConstraint(con("Coincident", l1, 2, l2, 1))
-        sk.addConstraint(con("Coincident", l2, 2, l3, 1))
-        sk.addConstraint(con("Tangent", l3, 2, a, bottom))
-        sk.addConstraint(con("Horizontal", l1))
-        sk.addConstraint(con("Horizontal", l3))
-        sk.addConstraint(con("Vertical", l2))
-        pb._place(sk, a, 3, side, x, y)
-        rad = sk.addConstraint(con("Radius", a, r))
-        sk.setExpression(f"Constraints[{rad}]", f"{SHEET}.recess_dia / 2")
-        dx = sk.addConstraint(con("DistanceX", a, 3, l2, 1, side * (r + 2)))
-        sk.setExpression(f"Constraints[{dx}]", f"{side} * ({reach})")
+    # start the geometry where the constraints will put it: a far-off start lets the
+    # solver collapse an arc while the constraints are only half added
+    half_w, half_h = width_mm / 2 - pb.PITCH_MM / 2, units * pb.PITCH_MM / 2
+    con = Sketcher.Constraint
+    q = math.pi / 2
+    rows = [1.5, units - 1.5] + list(extras)   # same order as exprs
+    for run in slot_runs(units, extras, 2 * r):
+        top_row, bottom_row = rows[run[0]], rows[run[-1]]
+        for side in (-1, 1):
+            cx = side * half_w
+            yt, yb = half_h - top_row * pb.PITCH_MM, half_h - bottom_row * pb.PITCH_MM
+            past = pb.PITCH_MM / 2 + SLOT_PAST_EDGE_MM
+            out = cx + side * past
+            peak = cx - side * r                    # the arc's innermost point, towards the panel
+            if len(run) == 1:
+                if side > 0:   # right column: arc on the left, CCW from top (start) to bottom (end)
+                    a = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yt, 0), V(0, 0, 1), r), q, 3 * q))
+                    a_top, a_bottom = (a, 1), (a, 2)
+                else:          # left column: arc on the right, CCW from bottom (start) to top (end)
+                    a = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yt, 0), V(0, 0, 1), r), -q, q))
+                    a_top, a_bottom = (a, 2), (a, 1)
+                arcs = [(a, exprs[run[0]])]
+            else:
+                if side > 0:   # quarter arcs on the left: top 90..180, bottom 180..270
+                    t = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yt, 0), V(0, 0, 1), r), q, 2 * q))
+                    bt = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yb, 0), V(0, 0, 1), r), 2 * q, 3 * q))
+                    a_top, t_peak, b_peak, a_bottom = (t, 1), (t, 2), (bt, 1), (bt, 2)
+                else:          # quarter arcs on the right: top 0..90, bottom 270..360
+                    t = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yt, 0), V(0, 0, 1), r), 0, q))
+                    bt = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yb, 0), V(0, 0, 1), r), 3 * q, 4 * q))
+                    a_top, t_peak, b_peak, a_bottom = (t, 2), (t, 1), (bt, 2), (bt, 1)
+                arcs = [(t, exprs[run[0]]), (bt, exprs[run[-1]])]
+            for (g, row), y in zip(arcs, (yt, yb)):   # place and size the arcs first, then the lines
+                pb._place(sk, g, 3, side, *pb.mount_xy(side, row), at=(cx, y))
+                rad = sk.addConstraint(con("Radius", g, r))
+                sk.setExpression(f"Constraints[{rad}]", f"{SHEET}.recess_dia / 2")
+            if len(run) > 1:
+                inner = sk.addGeometry(Part.LineSegment(V(peak, yt, 0), V(peak, yb, 0)))  # peak to peak
+                sk.addConstraint(con("Tangent", t_peak[0], t_peak[1], inner, 1))
+                sk.addConstraint(con("Tangent", inner, 2, b_peak[0], b_peak[1]))
+            l1 = sk.addGeometry(Part.LineSegment(V(cx, yt + r, 0), V(out, yt + r, 0)))   # top edge, outwards
+            l2 = sk.addGeometry(Part.LineSegment(V(out, yt + r, 0), V(out, yb - r, 0)))  # past the side edge
+            l3 = sk.addGeometry(Part.LineSegment(V(out, yb - r, 0), V(cx, yb - r, 0)))   # bottom edge, back in
+            sk.addConstraint(con("Tangent", a_top[0], a_top[1], l1, 1))
+            sk.addConstraint(con("Coincident", l1, 2, l2, 1))
+            sk.addConstraint(con("Coincident", l2, 2, l3, 1))
+            sk.addConstraint(con("Tangent", l3, 2, a_bottom[0], a_bottom[1]))
+            sk.addConstraint(con("Horizontal", l1))
+            sk.addConstraint(con("Horizontal", l3))
+            sk.addConstraint(con("Vertical", l2))
+            dx = sk.addConstraint(con("DistanceX", arcs[0][0], 3, l2, 1, side * past))
+            sk.setExpression(f"Constraints[{dx}]", f"{side} * ({reach})")
     return sk
 
 

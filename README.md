@@ -97,11 +97,13 @@ Rename, add or remove layers and change thicknesses (`3`, `3 mm`, `1/8"`, `0.125
 |---|---|
 | Clearance | The blank's clearance holes (Ø from the fastener preset) |
 | Recess | A larger circle at each mount point (default Ø9.5), so the screw head sits down in the layer |
-| Slot | The same circle opened through the nearest side edge, a U-shaped notch |
+| Slot | The same circle opened through the nearest side edge, a U-shaped notch. Mounts too close together to leave a 3 mm web (rows one unit apart with the Ø9.5 default) share one slot: a straight edge runs from the peak of one arc to the next, so no thin sliver is left between them |
 
 The mount column sits 4.7625 mm in from the side edge, so a recess of Ø9.525 or more breaks through the edge; the dialog shows how much material is left.
 
 **Faceplate inset:** the faceplate (the first layer) can be smaller than the panel, so its edges sit back from the plates behind it. Set the left / right / top / bottom insets in the dialog; positive values shrink it from that edge, and the corner radius follows. The diffuser and backplate stay full size. An inset may not reach the clearance holes (under 1.96 mm on the sides with Ø5.6). With the default Ø9.5 recess, any side inset opens the recesses through the faceplate's side edges.
+
+Which slots merge is decided when the stack is built. Re-running Panel Blank regroups them; after editing the recess Ø or a row cell by hand, click Plate Stack again.
 
 Thicknesses, the recess Ø and the faceplate insets (`inset_l`, `inset_r`, `inset_t`, `inset_b`) live in the `PlateStack` spreadsheet: edit a cell and recompute. Click **Plate Stack** again to change layers or cuts; it updates the same Bodies in place. Re-running **Panel Blank** (new height, extra rows, fastener) updates the stack too.
 

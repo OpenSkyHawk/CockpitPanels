@@ -350,6 +350,62 @@ check("stack + Export Layers: faceplate 4 LINE + 6 CIRCLE",
       ents["FacePlate"] == {("LINE", "FacePlate"): 4, ("CIRCLE", "FacePlate"): 6}, ents["FacePlate"])
 App.closeDocument(doc.Name)
 
+# --- merged slots: neighbours one pitch apart share one slot ---------------
+def vertical_lines(body):
+    """(x, length) of the straight vertical edges on the plate's back face."""
+    out = []
+    for e in el.plate_profile(body).Edges:
+        if e.Curve.TypeId == "Part::GeomLine":
+            a, b = e.Vertexes[0].Point, e.Vertexes[-1].Point
+            if abs(a.x - b.x) < 1e-6:
+                out.append((round(a.x, 4), round(abs(a.y - b.y), 4)))
+    return sorted(out)
+
+
+check("slot runs: 6U rows 1.5 / 4.5 stay apart", ps.slot_runs(6, (), 9.5) == [[0], [1]])
+check("slot runs: 6U + row 2.5 merges 1.5 and 2.5", ps.slot_runs(6, (2.5,), 9.5) == [[0, 2], [1]])
+check("slot runs: rows two units apart stay apart", ps.slot_runs(7, (3.5,), 9.5) == [[0], [2], [1]])
+check("slot runs: a small recess one unit apart stays apart (web 4.5 mm)", ps.slot_runs(6, (2.5,), 5) == [[0], [2], [1]])
+check("slot runs: full rail 20U is one run per side",
+      ps.slot_runs(20, pb.full_rail_rows(20), 9.5) == [[0] + list(range(2, 2 + len(pb.full_rail_rows(20)))) + [1]])
+
+doc = new_doc("MergedSlots")
+pb.make_blank(doc, 6, extra_rows=(2.5,))
+slot = [("FacePlate", "=1/16 * 25.4 mm", "Slot"), ("Diffuser", "=1/8 * 25.4 mm", "Clearance")]
+stack = ps.make_stack(doc, slot)
+sk = doc.StackSlots
+check("merged slots: StackSlots fully constrained, 4 closed profiles (2 merged + 2 single)",
+      fully_constrained(sk) and len(sk.Shape.Wires) == 4 and all(w.isClosed() for w in sk.Shape.Wires),
+      (sk.solve(), len(sk.Shape.Wires)))
+inner_x = 146.05 / 2 - P / 2 - 4.75
+peaks = [(x, l) for x, l in vertical_lines(doc.FacePlate) if close(abs(x), inner_x, 1e-3)]
+check("merged slots: a straight peak-to-peak edge one pitch long on each side",
+      sorted(round(x, 3) for x, l in peaks if close(l, P, 1e-3)) == [round(-inner_x, 3), round(inner_x, 3)], peaks)
+check("merged slots: faceplate is one valid solid",
+      len(doc.FacePlate.Shape.Solids) == 1
+      and all("Invalid" not in o.State and "Error" not in o.State for o in doc.FacePlate.Group))
+col = 146.05 / 2 - P / 2
+mid_y = 6 * P / 2 - 2 * P              # halfway between rows 1.5 and 2.5
+z = -IN / 32                            # mid-thickness of the faceplate
+probe = [App.Vector(sx * (col - 3), mid_y, z) for sx in (-1, 1)]   # where the sliver was
+check("merged slots: no plate left in the cusp between the pair",
+      not any(doc.FacePlate.Shape.isInside(v, 1e-6, True) for v in probe))
+check("merged slots: plate still solid just inside the slot's peak line",
+      all(doc.FacePlate.Shape.isInside(App.Vector(sx * (col - 4.75 - 0.5), mid_y, z), 1e-6, True) for sx in (-1, 1)))
+doc.PlateStack.set("recess_dia", "9 mm")
+doc.recompute()
+check("merged slots: recess_dia cell edit keeps the slots valid",
+      len(doc.FacePlate.Shape.Solids) == 1 and fully_constrained(doc.StackSlots))
+App.closeDocument(doc.Name)
+
+doc = new_doc("FullRailSlots")
+pb.make_blank(doc, 12, extra_rows=pb.full_rail_rows(12))
+ps.make_stack(doc, slot)
+check("full rail 12U: one slot per side, faceplate one solid",
+      len(doc.StackSlots.Shape.Wires) == 2 and fully_constrained(doc.StackSlots)
+      and len(doc.FacePlate.Shape.Solids) == 1)
+App.closeDocument(doc.Name)
+
 # --- corner radius + faceplate insets -------------------------------------
 def arcs(shape):
     return sorted(round(e.Curve.Radius, 4) for e in shape.Edges
