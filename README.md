@@ -109,9 +109,9 @@ Click **Plate Stack** in a document that has a Panel Blank. The dialog lists the
 
 Rename, add or remove layers and change thicknesses (`3`, `3 mm`, `1/8"`, `0.125 in`). Each layer becomes a Part Design Body with the same name. The faceplate's front face sits on the blank's sketch plane (z = 0) facing +z, and every further layer sits directly behind the one before, so the Top view shows the panel as seen in the cockpit.
 
-<p align="center"><img src="docs/images/stack_iso.png" width="560" alt="The assembled plate stack, faceplate on top, with screw-head recesses at the four mount points"></p>
+<p align="center"><img src="docs/images/stack_iso.png" width="560" alt="The assembled plate stack, faceplate on top, with a screw-head slot at each of the four mount points"></p>
 
-<p align="center"><em>The example stack assembled. The faceplate's Recess cut lets the screw heads sit down in the plate.</em></p>
+<p align="center"><em>The example stack assembled, faceplate on top.</em></p>
 
 | Fastener cut | What it cuts |
 |---|---|
@@ -140,7 +140,7 @@ Thicknesses, the recess Ø and the faceplate insets (`inset_l`, `inset_r`, `inse
 
 <p align="center"><img src="docs/images/lightburn_import.png" width="720" alt="The three exported DXFs imported into LightBurn: backplate and diffuser on the left, slotted faceplate selected on the right"></p>
 
-<p align="center"><em>The same files opened in LightBurn, ready to cut. Here the faceplate uses the Slot cut.</em></p>
+<p align="center"><em>The same files opened in LightBurn, ready to cut.</em></p>
 
 ## Tests
 
