@@ -17,6 +17,9 @@ Fastener styles (per layer):
   Recess     a larger circle at each mount point (StackRecesses), so the
              screw head sits down in the layer
   Slot       the same circle opened through the nearest side edge (StackSlots)
+  Slot (open ends)
+             the same, with the top and bottom runs also open through the panel's
+             top / bottom edge (StackOpenSlots)
 
 The faceplate (the first layer) can be inset from the blank's edges, left /
 right / top / bottom, positive = smaller: StackFaceOutline is the blank outline
@@ -37,10 +40,10 @@ from . import panel_blank as pb
 
 V = App.Vector
 SHEET = "PlateStack"
-RECESSES, SLOTS, FACE_OUTLINE = "StackRecesses", "StackSlots", "StackFaceOutline"
+RECESSES, SLOTS, OPEN_SLOTS, FACE_OUTLINE = "StackRecesses", "StackSlots", "StackOpenSlots", "StackFaceOutline"
 INSETS = ("inset_l", "inset_r", "inset_t", "inset_b")
-STYLES = ("Recess", "Slot", "Clearance")
-STYLE_SKETCH = {"Recess": RECESSES, "Slot": SLOTS, "Clearance": pb.HOLES}
+STYLES = ("Recess", "Slot", "Slot (open ends)", "Clearance")
+STYLE_SKETCH = {"Recess": RECESSES, "Slot": SLOTS, "Slot (open ends)": OPEN_SLOTS, "Clearance": pb.HOLES}
 INCH = 25.4
 DEFAULT_RECESS_MM = 9.5
 DEFAULT_LAYERS = (            # name, thickness expression, style
@@ -131,67 +134,100 @@ def slot_runs(units, extra_rows, recess_dia):
     return runs
 
 
-def _slots(doc, n_extra):
+def _slots(doc, n_extra, name=SLOTS, open_ends=False):
     """A U per mount point: a half circle on the panel side, open through the side edge.
     Neighbouring mounts too close to leave a usable web share one slot: a quarter arc
-    at each end, joined by a straight line from the peak of one to the other."""
-    sk = pb._sketch(doc, SLOTS)
+    at each end, joined by a straight line from the peak of one to the other.
+    open_ends: the runs holding the top / bottom outer row also open straight through
+    the panel's top / bottom edge; runs in the middle of the side stay closed."""
+    sk = pb._sketch(doc, name)
     units, width_mm, extras, _, _, _ = pb._read_existing(doc)
     exprs = pb.row_exprs(n_extra)
     r = read_existing(doc)[1] / 2 if doc.getObject(SHEET) else DEFAULT_RECESS_MM / 2
-    reach = f"{pb.SHEET}.pitch / 2 + {SLOT_PAST_EDGE_MM} mm"
-    # start the geometry where the constraints will put it: a far-off start lets the
-    # solver collapse an arc while the constraints are only half added
+    B = pb.SHEET
+    # start the geometry where the constraints will put it: the expressions only apply
+    # on recompute, and a far-off start lets the solver collapse the half-built profile
     half_w, half_h = width_mm / 2 - pb.PITCH_MM / 2, units * pb.PITCH_MM / 2
+    edge_out = half_h + SLOT_PAST_EDGE_MM
     con = Sketcher.Constraint
     q = math.pi / 2
     rows = [1.5, units - 1.5] + list(extras)   # same order as exprs
     for run in slot_runs(units, extras, 2 * r):
         top_row, bottom_row = rows[run[0]], rows[run[-1]]
+        open_top = open_ends and run[0] == 0          # holds the top outer row
+        open_bottom = open_ends and run[-1] == 1      # holds the bottom outer row
         for side in (-1, 1):
             cx = side * half_w
             yt, yb = half_h - top_row * pb.PITCH_MM, half_h - bottom_row * pb.PITCH_MM
             past = pb.PITCH_MM / 2 + SLOT_PAST_EDGE_MM
             out = cx + side * past
-            peak = cx - side * r                    # the arc's innermost point, towards the panel
-            if len(run) == 1:
+            peak = cx - side * r                     # the arcs' innermost x, towards the panel
+            inner = None
+            half_u = len(run) == 1 and not (open_top or open_bottom)   # a plain single U
+            if half_u:
                 if side > 0:   # right column: arc on the left, CCW from top (start) to bottom (end)
                     a = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yt, 0), V(0, 0, 1), r), q, 3 * q))
                     a_top, a_bottom = (a, 1), (a, 2)
                 else:          # left column: arc on the right, CCW from bottom (start) to top (end)
                     a = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yt, 0), V(0, 0, 1), r), -q, q))
                     a_top, a_bottom = (a, 2), (a, 1)
-                arcs = [(a, exprs[run[0]])]
+                arcs = [(a, exprs[run[0]], yt)]
             else:
-                if side > 0:   # quarter arcs on the left: top 90..180, bottom 180..270
-                    t = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yt, 0), V(0, 0, 1), r), q, 2 * q))
-                    bt = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yb, 0), V(0, 0, 1), r), 2 * q, 3 * q))
-                    a_top, t_peak, b_peak, a_bottom = (t, 1), (t, 2), (bt, 1), (bt, 2)
-                else:          # quarter arcs on the right: top 0..90, bottom 270..360
-                    t = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yt, 0), V(0, 0, 1), r), 0, q))
-                    bt = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yb, 0), V(0, 0, 1), r), 3 * q, 4 * q))
-                    a_top, t_peak, b_peak, a_bottom = (t, 2), (t, 1), (bt, 2), (bt, 1)
-                arcs = [(t, exprs[run[0]]), (bt, exprs[run[-1]])]
-            for (g, row), y in zip(arcs, (yt, yb)):   # place and size the arcs first, then the lines
+                arcs = []
+                if not open_top:     # quarter arc from the peak round to the top
+                    t0 = q if side > 0 else 0
+                    arc_top = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yt, 0), V(0, 0, 1), r), t0, t0 + q))
+                    a_top, t_peak = ((arc_top, 1), (arc_top, 2)) if side > 0 else ((arc_top, 2), (arc_top, 1))
+                    arcs.append((arc_top, exprs[run[0]], yt))
+                if not open_bottom:  # quarter arc from the peak round to the bottom
+                    b0 = 2 * q if side > 0 else 3 * q
+                    arc_bottom = sk.addGeometry(Part.ArcOfCircle(Part.Circle(V(cx, yb, 0), V(0, 0, 1), r), b0, b0 + q))
+                    b_peak, a_bottom = ((arc_bottom, 1), (arc_bottom, 2)) if side > 0 else ((arc_bottom, 2), (arc_bottom, 1))
+                    arcs.append((arc_bottom, exprs[run[-1]], yb))
+            for g, row, y in arcs:   # place and size the arcs first, then hang the lines off them
                 pb._place(sk, g, 3, side, *pb.mount_xy(side, row), at=(cx, y))
                 rad = sk.addConstraint(con("Radius", g, r))
                 sk.setExpression(f"Constraints[{rad}]", f"{SHEET}.recess_dia / 2")
-            if len(run) > 1:
-                inner = sk.addGeometry(Part.LineSegment(V(peak, yt, 0), V(peak, yb, 0)))  # peak to peak
-                sk.addConstraint(con("Tangent", t_peak[0], t_peak[1], inner, 1))
-                sk.addConstraint(con("Tangent", inner, 2, b_peak[0], b_peak[1]))
-            l1 = sk.addGeometry(Part.LineSegment(V(cx, yt + r, 0), V(out, yt + r, 0)))   # top edge, outwards
-            l2 = sk.addGeometry(Part.LineSegment(V(out, yt + r, 0), V(out, yb - r, 0)))  # past the side edge
-            l3 = sk.addGeometry(Part.LineSegment(V(out, yb - r, 0), V(cx, yb - r, 0)))   # bottom edge, back in
-            sk.addConstraint(con("Tangent", a_top[0], a_top[1], l1, 1))
+            top_pt = V(peak, edge_out, 0) if open_top else V(cx, yt + r, 0)
+            bot_pt = V(peak, -edge_out, 0) if open_bottom else V(cx, yb - r, 0)
+            if not half_u:
+                start = top_pt if open_top else V(peak, yt, 0)
+                end = bot_pt if open_bottom else V(peak, yb, 0)
+                inner = sk.addGeometry(Part.LineSegment(start, end))      # the straight run at the peaks
+            l1 = sk.addGeometry(Part.LineSegment(top_pt, V(out, top_pt.y, 0)))          # top, outwards
+            l2 = sk.addGeometry(Part.LineSegment(V(out, top_pt.y, 0), V(out, bot_pt.y, 0)))  # past the side edge
+            l3 = sk.addGeometry(Part.LineSegment(V(out, bot_pt.y, 0), bot_pt))          # bottom, back in
             sk.addConstraint(con("Coincident", l1, 2, l2, 1))
             sk.addConstraint(con("Coincident", l2, 2, l3, 1))
-            sk.addConstraint(con("Tangent", l3, 2, a_bottom[0], a_bottom[1]))
             sk.addConstraint(con("Horizontal", l1))
             sk.addConstraint(con("Horizontal", l3))
             sk.addConstraint(con("Vertical", l2))
-            dx = sk.addConstraint(con("DistanceX", arcs[0][0], 3, l2, 1, side * past))
-            sk.setExpression(f"Constraints[{dx}]", f"{side} * ({reach})")
+            c = sk.addConstraint(con("DistanceX", -1, 1, l2, 1, out))
+            sk.setExpression(f"Constraints[{c}]", f"{side} * ({B}.width / 2 + {SLOT_PAST_EDGE_MM} mm)")
+            if half_u:            # the half arc meets both edge lines
+                sk.addConstraint(con("Tangent", a_top[0], a_top[1], l1, 1))
+                sk.addConstraint(con("Tangent", l3, 2, a_bottom[0], a_bottom[1]))
+                continue
+            if open_top:          # the peak line runs out through the top edge
+                sk.addConstraint(con("Coincident", inner, 1, l1, 1))
+                c = sk.addConstraint(con("DistanceY", -1, 1, l1, 1, edge_out))
+                sk.setExpression(f"Constraints[{c}]", f"{B}.units * {B}.pitch / 2 + {SLOT_PAST_EDGE_MM} mm")
+            else:
+                sk.addConstraint(con("Tangent", a_top[0], a_top[1], l1, 1))
+                sk.addConstraint(con("Tangent", t_peak[0], t_peak[1], inner, 1))
+            if open_bottom:       # ... and / or through the bottom edge
+                sk.addConstraint(con("Coincident", inner, 2, l3, 2))
+                c = sk.addConstraint(con("DistanceY", -1, 1, l3, 2, -edge_out))
+                sk.setExpression(f"Constraints[{c}]", f"-({B}.units * {B}.pitch / 2 + {SLOT_PAST_EDGE_MM} mm)")
+            else:
+                sk.addConstraint(con("Tangent", l3, 2, a_bottom[0], a_bottom[1]))
+                sk.addConstraint(con("Tangent", inner, 2, b_peak[0], b_peak[1]))
+            if open_top or open_bottom:   # one end has no arc to hold the line upright
+                sk.addConstraint(con("Vertical", inner))
+            if open_top and open_bottom:  # no arcs at all: pin the peak line itself
+                c = sk.addConstraint(con("DistanceX", -1, 1, inner, 1, peak))
+                sk.setExpression(f"Constraints[{c}]",
+                                 f"{side} * ({B}.width / 2 - {B}.pitch / 2 - {SHEET}.recess_dia / 2)")
     return sk
 
 
@@ -283,7 +319,8 @@ def make_stack(doc, layers=None, recess_dia=DEFAULT_RECESS_MM, insets=(0, 0, 0, 
               for i, (name, _, style) in enumerate(layers)]
     grp = doc.getObject("PlateStackGroup") or doc.addObject("App::DocumentObjectGroup", "PlateStackGroup")
     grp.Label = "Plate Stack"
-    for o in (doc.getObject(SHEET), doc.getObject(FACE_OUTLINE), doc.getObject(RECESSES), doc.getObject(SLOTS)):
+    for o in (doc.getObject(SHEET), doc.getObject(FACE_OUTLINE), doc.getObject(RECESSES), doc.getObject(SLOTS),
+              doc.getObject(OPEN_SLOTS)):
         if o not in grp.Group:
             grp.addObject(o)
     doc.recompute()
@@ -295,7 +332,7 @@ def make_stack(doc, layers=None, recess_dia=DEFAULT_RECESS_MM, insets=(0, 0, 0, 
 def _style_view(doc, bodies):
     """Show only the plates: hide the helper sketches and binders (all drawn at z = 0,
     on top of the faceplate) and give each layer its own colour."""
-    helpers = [pb.OUTLINE, pb.POINTS, pb.HOLES, FACE_OUTLINE, RECESSES, SLOTS]
+    helpers = [pb.OUTLINE, pb.POINTS, pb.HOLES, FACE_OUTLINE, RECESSES, SLOTS, OPEN_SLOTS]
     for b in bodies:
         helpers += [f"{b.Name}_Outline", f"{b.Name}_Cut"]
     for name in helpers:
@@ -328,6 +365,7 @@ def refresh_cut_sketches(doc):
     n = _n_extra(doc)
     _recesses(doc, n)
     _slots(doc, n)
+    _slots(doc, n, OPEN_SLOTS, open_ends=True)
     doc.recompute()
 
 

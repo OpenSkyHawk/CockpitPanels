@@ -406,6 +406,54 @@ check("full rail 12U: one slot per side, faceplate one solid",
       and len(doc.FacePlate.Shape.Solids) == 1)
 App.closeDocument(doc.Name)
 
+# --- Slot (open ends): end runs open through the top / bottom edge ----------
+def edge_cut_width(body, y):
+    """Width of the plate material at height y along the top / bottom edge: 146.05 when
+    nothing cuts through that edge."""
+    sec = body.Shape.slice(App.Vector(0, 1, 0), y)
+    return sum(w.BoundBox.XLength for w in sec)
+
+
+open_slot = [("FacePlate", "=1/16 * 25.4 mm", "Slot (open ends)"), ("Diffuser", "=1/8 * 25.4 mm", "Clearance")]
+for n, extra, want_wires, why in [
+        (6, (), 4, "6U: each outer row its own run, open through its edge"),
+        (8, (2.5, 5.5), 4, "8U + 2.5 / 5.5: both outer pairs merged and open"),
+        (9, (2.5, 4.5), 6, "9U + 2.5 / 4.5: top pair open, middle row closed, bottom open"),
+        (12, tuple(pb.full_rail_rows(12)), 2, "12U full rail: one strip per side, top to bottom")]:
+    doc = new_doc("OpenSlots")
+    pb.make_blank(doc, n, extra_rows=extra)
+    ps.make_stack(doc, open_slot)
+    sk = doc.StackOpenSlots
+    fp = doc.FacePlate
+    top_y, bot_y = n * P / 2 - 0.2, -n * P / 2 + 0.2    # just inside the top / bottom edges
+    gap = 2 * (P / 2 + 4.75)                             # each side loses column inset + recess radius
+    ok = (fully_constrained(sk) and len(sk.Shape.Wires) == want_wires
+          and all(w.isClosed() for w in sk.Shape.Wires)
+          and len(fp.Shape.Solids) == 1
+          and all("Invalid" not in o.State and "Error" not in o.State for o in fp.Group)
+          and close(edge_cut_width(fp, top_y), 146.05 - gap, 1e-3)
+          and close(edge_cut_width(fp, bot_y), 146.05 - gap, 1e-3))
+    check(f"open-end slots: {why}", ok,
+          (sk.solve(), len(sk.Shape.Wires), len(fp.Shape.Solids),
+           round(edge_cut_width(fp, top_y), 3), round(edge_cut_width(fp, bot_y), 3)))
+    App.closeDocument(doc.Name)
+
+doc = new_doc("OpenSlotsMiddle")
+pb.make_blank(doc, 9, extra_rows=(4.5,))
+ps.make_stack(doc, open_slot)
+col = 146.05 / 2 - P / 2
+z = -IN / 32
+mid_closed = [App.Vector(sx * (col - 3), 9 * P / 2 - 3 * P, z) for sx in (-1, 1)]   # halfway 1.5 -> 4.5
+check("open-end slots: plate left between the open top run and a closed middle run",
+      all(doc.FacePlate.Shape.isInside(v, 1e-6, True) for v in mid_closed))
+doc.PlateStack.set("recess_dia", "9 mm")
+doc.recompute()
+check("open-end slots: recess_dia cell edit keeps them valid",
+      fully_constrained(doc.StackOpenSlots) and len(doc.FacePlate.Shape.Solids) == 1)
+check("plain Slot style unchanged next to it (closed U at the outer rows)",
+      fully_constrained(doc.StackSlots) and len(doc.StackSlots.Shape.Wires) == 6)
+App.closeDocument(doc.Name)
+
 # --- corner radius + faceplate insets -------------------------------------
 def arcs(shape):
     return sorted(round(e.Curve.Radius, 4) for e in shape.Edges

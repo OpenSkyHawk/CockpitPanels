@@ -98,6 +98,7 @@ Rename, add or remove layers and change thicknesses (`3`, `3 mm`, `1/8"`, `0.125
 | Clearance | The blank's clearance holes (Ø from the fastener preset) |
 | Recess | A larger circle at each mount point (default Ø9.5), so the screw head sits down in the layer |
 | Slot | The same circle opened through the nearest side edge, a U-shaped notch. Mounts too close together to leave a 3 mm web (rows one unit apart with the Ø9.5 default) share one slot: a straight edge runs from the peak of one arc to the next, so no thin sliver is left between them |
+| Slot (open ends) | Like Slot, but the slot holding the top outer row also runs straight out through the panel's top edge, and the one holding the bottom outer row through the bottom edge. Slots in the middle of the side stay closed |
 
 The mount column sits 4.7625 mm in from the side edge, so a recess of Ø9.525 or more breaks through the edge; the dialog shows how much material is left.
 
